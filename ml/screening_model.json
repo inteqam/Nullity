@@ -1,0 +1,29 @@
+{
+  "name": "NULLITY Demo Symptom-Risk Logistic Regression",
+  "version": 1,
+  "features": [
+    "low_mood",
+    "loss_of_interest",
+    "sleep_change",
+    "energy_change",
+    "appetite_change",
+    "self_worth",
+    "concentration",
+    "movement_change",
+    "hopelessness"
+  ],
+  "coefficients": [
+    1.15351514,
+    1.13085604,
+    0.21847363,
+    0.24099124,
+    0.02025243,
+    0.08576185,
+    0.0860523,
+    0.18189946,
+    1.10552958
+  ],
+  "intercept": -5.8290621052307765,
+  "threshold": 0.5,
+  "training_note": "Synthetic demonstration data only; not clinically valid."
+}
