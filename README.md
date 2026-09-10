@@ -2,65 +2,47 @@
 
 **Make space for what matters.**
 
-NULLITY is a voice-first wellbeing/reflection web app. It turns an unstructured day check-in into a small, deterministic routine while using Gemini only for interpretation/structuring.
+NULLITY is a voice-first wellbeing and self-reflection web app. Instead of another wall of generic advice, it turns a user's own description of their day into a structured understanding of their state and one small, doable action — then tracks how that action actually affected them over time.
 
-## What's new in v1.2
+## The idea
 
-- **Optional authentication:** users can continue as a guest and are never forced to create an account.
-- **Google Sign-In** through Firebase Authentication.
-- **Phone number OTP** sign-in through Firebase Authentication.
-- **Email + password** signup/login.
-- **Password reset email** flow.
-- **Email verification** after email/password signup.
-- Account data is scoped by Firebase UID in the browser.
-- Existing guest history is migrated to the account on first sign-in when the account has no history yet.
-- Authentication UI is intentionally presented as a request: “Save your journey across devices — if you want to.”
+Most wellness apps ask you to fill out mood-tracker forms. NULLITY asks one question — **"How was your day?"** — lets you answer by voice or text in your own words, and does the structuring for you:
 
-> **Security note:** NULLITY never emails or stores a user's password in plain text. Password-reset emails contain a secure reset action instead.
-
-## Authentication setup
-
-The code uses Firebase Authentication. Firebase supports Google sign-in, phone-number SMS authentication, email/password accounts, verification emails, and password reset emails. See the official Firebase Authentication documentation for provider setup.
-
-1. Create a Firebase project.
-2. Add a **Web App** in the Firebase console.
-3. Go to **Authentication → Sign-in method**.
-4. Enable:
-   - Google
-   - Phone
-   - Email/Password
-5. Add your local/deployed domain to Firebase Authentication's authorized domains.
-6. Copy the Firebase Web App configuration into `.env`.
-
-Create `.env` from `.env.example`:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-# GEMINI_MODEL=gemini-2.5-flash-lite
-
-VITE_FIREBASE_API_KEY=your_firebase_web_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
+```
+Check-in → Understand → Plan → Do → Reflect → Track → (repeat, smarter each time)
 ```
 
-For phone OTP, Firebase uses a reCAPTCHA verifier before sending the SMS. Test phone numbers can be configured in Firebase Authentication during development so you do not repeatedly consume real SMS quotas.
+- **Check-in** — speak or type freely, no forced questionnaire
+- **Understand** — an LLM (Gemini) converts the unstructured description into a structured state: mood, energy, stress, themes, and a goal — with a deterministic local fallback if the API is unavailable, so the app never breaks on a network hiccup
+- **Plan** — the model does *not* invent interventions. It picks from a small, curated, human-authored activity library (breathing, guided reflection, tiny focus sessions), so behavior stays predictable and testable
+- **Do** — a short, timed activity, designed to be finishable in a few minutes
+- **Reflect** — a quick before/after self-rating, so the app measures impact instead of assuming it
+- **Track** — a dashboard of mood/energy/stress trends, recurring themes, streaks, and session history
 
-## Run locally
+An experimental **ML screening layer** (logistic regression over structured wellbeing signals) is included separately, explicitly framed as a screening/awareness signal — never a diagnosis.
+
+## Tech stack
+
+- **Frontend:** React 19 + Vite 7, Tailwind CSS 4
+- **Backend:** Express 5 (serves the built frontend + a small API surface)
+- **AI:** Google Gemini, via `@google/genai`, for check-in interpretation — with a rule-based local fallback classifier
+- **Auth:** Firebase Authentication (Google, phone OTP, email/password) — entirely optional; the app works fully as a guest
+- **Persistence:** `localStorage`, namespaced per guest/account
+- **ML:** a small logistic-regression screening model, trainable via a Python script over a synthetic demo dataset
+
+## Getting started
 
 ```bash
 npm install
-```
-
-Start:
-
-```bash
+cp .env.example .env      # optional — the app runs fine with this left mostly blank
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Then open `http://localhost:5173`.
+
+- Leave `.env` blank and the app still works: no Gemini key → falls back to local classification; no Firebase config → runs in guest-only mode.
+- To enable real AI classification, add `GEMINI_API_KEY` to `.env`.
+- To enable Google/phone/email sign-in, create a Firebase project, enable those providers under Authentication → Sign-in method, and copy the Web App config's `VITE_FIREBASE_*` values into `.env`.
 
 Production build:
 
@@ -69,44 +51,29 @@ npm run build
 npm start
 ```
 
-## Guest mode
-
-Authentication is **not mandatory**. If Firebase is not configured, NULLITY still works in guest/device-only mode. If Firebase is configured, the landing page still lets the user continue without an account.
-
-The user is invited to sign in mainly to preserve their journey across devices.
-
-## ML screening
-
-The included `data/demo_screening.csv` is **synthetic demonstration data**. It exists so the full ML pipeline can be run locally and should not be represented as clinical evidence.
-
-Retrain:
+Retrain the demo ML screening model:
 
 ```bash
 npm run train:screening
 ```
 
-The script trains a Logistic Regression model, prints holdout metrics, and writes `ml/screening_model.json`.
+## Design principles
 
-Before using a model for any real health purpose, replace the demo dataset with a properly licensed, ethically collected and clinically validated dataset, perform appropriate external validation, calibration, subgroup/fairness analysis, and clinical review.
+1. **Conversation over questionnaires** — let people describe themselves in their own words
+2. **AI for understanding, not unrestricted decision-making** — the LLM structures input; a fixed activity library decides interventions
+3. **Small actions over generic advice** — one realistic thing to do right now, not a life overhaul
+4. **Progress over one-off interactions** — every check-in feeds a longitudinal record
+5. **Screening over diagnosis** — the ML layer flags patterns worth attention; it never labels a condition
 
-## Architecture
+## Current status / known limitations
 
-```text
-React/Vite UI
-   |
-   +--> Firebase Authentication
-   |       +--> Google
-   |       +--> Phone OTP
-   |       +--> Email/password
-   |       +--> Password reset
-   |
-   +--> /api/classify ----------> Gemini
-   |
-   +--> /api/screening/predict -> Logistic Regression artifact
-   |
-   +--> localStorage ----------> guest/account-scoped history
-```
+Being upfront about where this stands:
 
-## Important health/safety note
+- The core loop (check-in → understand → plan → do → reflect → track) is fully implemented and working end to end.
+- Authentication currently provides **continuity within a browser**, not true cross-device sync — Firebase handles identity, but history lives in `localStorage`, not a synced backend. Multi-device sync would need a real datastore (e.g. Firestore) behind it.
+- The ML screening layer is a working prototype trained on a **synthetic demo dataset** — not clinically validated, and is presented as a screening signal only, never a diagnosis.
+- Longitudinal pattern-surfacing ("you've mentioned academic pressure several times this week") is partially wired — theme frequency is tracked, but proactive nudges from it aren't fully built yet.
 
-NULLITY is a wellness/reflection product, not a medical or mental-health treatment service. The ML feature must not be presented as diagnosing depression. Screening tools can indicate symptom severity/risk but do not establish a diagnosis.
+## Safety
+
+NULLITY is a wellness and self-reflection tool, not a replacement for a mental-health professional. It includes basic crisis-language detection on check-in text as a safety net, and never presents its ML screening output as a clinical diagnosis.
